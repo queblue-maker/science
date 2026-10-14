@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>세특 탐구 설계실</title>
+<meta name="description" content="과학 과목·단원과 희망 진로를 골라 탐구 주제와 세특 심화 키워드를 찾아보는 도구">
+<meta property="og:title" content="세특 탐구 설계실">
+<meta property="og:description" content="과학 단원 × 희망 진로 탐구 주제 추천">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a4ed6'/%3E%3Cpath d='M12 6h8M14 6v8l-6 10a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-10V6' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* standalone reset */
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+
+/* Layout: graph-paper header band with three picking steps, then results column + sticky side board (keywords, saved topics) */
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --ink:#152030; --muted:#5b677a; --line:#d8dee7;
+  --accent:#2a4ed6; --accent-ink:#ffffff; --accent-soft:#e3e9fc;
+  --amber:#a8590a; --amber-soft:#fbeedb; --ok:#1f7a4d; --grid:rgba(42,78,214,.07);
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e131b; --surface:#151c27; --ink:#e5eaf2; --muted:#96a2b4; --line:#273244;
+  --accent:#7f9bff; --accent-ink:#0e131b; --accent-soft:#1c2645;
+  --amber:#f0a65a; --amber-soft:#33230f; --ok:#5fd09a; --grid:rgba(127,155,255,.07); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e131b; --surface:#151c27; --ink:#e5eaf2; --muted:#96a2b4; --line:#273244;
+  --accent:#7f9bff; --accent-ink:#0e131b; --accent-soft:#1c2645;
+  --amber:#f0a65a; --amber-soft:#33230f; --ok:#5fd09a; --grid:rgba(127,155,255,.07); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header band */
+.band{border-bottom:1px solid var(--line);
+  background-color:var(--surface);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:22px 22px}
+.band .wrap{padding-block:28px 22px;display:grid;gap:20px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+h1{margin:4px 0 6px;font-size:clamp(26px,4vw,36px);line-height:1.2;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:62ch}
+
+.step{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:start}
+.step-label{font-family:var(--f-mono);font-size:12px;color:var(--muted);padding-top:7px;letter-spacing:.04em}
+.step-label b{display:block;color:var(--ink);font-family:var(--f-body);font-size:14px;letter-spacing:0}
+.rows{display:grid;gap:8px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.grp{font-size:12px;color:var(--muted);width:56px;flex:none}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:14px;cursor:pointer;line-height:1.4;transition:background .12s,border-color .12s}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip .num{font-family:var(--f-mono);font-size:12px;opacity:.7;margin-right:4px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.cgrid .chip{border-radius:8px;text-align:left;padding:7px 10px}
+.cgrid .chip small{display:block;font-size:11.5px;opacity:.72;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tools{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.field{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.field input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;min-width:0;width:190px;color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 11px;font-size:13px;cursor:pointer;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+/* main */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding-block:24px 48px}
+.res-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.res-head h2{margin:0;font-size:19px;text-wrap:balance}
+.res-head .meta{font-size:13px;color:var(--muted)}
+.list{display:grid;gap:12px}
+.sub{margin:28px 0 10px;font-size:14px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:10px}
+.sub::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:grid;gap:10px;min-width:0}
+.card.dim{opacity:.86}
+.card.gen{border-style:dashed}
+.tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px}
+.stamp{font-family:var(--f-mono);font-weight:600;border:1.5px solid currentColor;color:var(--accent);border-radius:4px;padding:0 6px;letter-spacing:.02em}
+.lvl{border-radius:4px;padding:1px 7px;font-weight:600;background:var(--accent-soft);color:var(--accent)}
+.lvl.hi{background:var(--amber-soft);color:var(--amber)}
+.ctag{color:var(--muted)}
+.ctag+.ctag::before{content:"· ";}
+.where{margin-left:auto;font-family:var(--f-mono);color:var(--muted);font-size:11.5px}
+.card h3{margin:0;font-size:17px;line-height:1.45;font-weight:600;text-wrap:balance}
+.kws{display:flex;flex-wrap:wrap;gap:5px}
+.kw{font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 8px;cursor:pointer}
+.kw:hover{border-color:var(--accent);color:var(--accent)}
+.ext{font-size:13.5px;color:var(--muted);margin:0}
+.ext b{color:var(--ink);font-weight:600}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 12px;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.draft{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;margin:0}
+.note{font-size:12px;color:var(--muted)}
+
+/* aside */
+aside{display:grid;gap:16px;align-content:start;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px}
+.panel h2{margin:0;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.panel h3{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.basket{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.basket li{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.45;border-bottom:1px solid var(--line);padding-bottom:8px}
+.basket li span{flex:1;min-width:0}
+.basket li small{display:block;color:var(--muted);font-size:12px}
+.x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px}
+.x:hover{color:var(--amber)}
+.empty{font-size:13px;color:var(--muted);margin:0}
+.tip{font-size:12.5px;color:var(--muted);line-height:1.65;margin:0;padding-left:16px}
+.tip li{margin-bottom:3px}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+footer .wrap{padding-block:16px 28px}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr}
+  aside{position:static;max-height:none;overflow:visible}
+}
+@media (max-width:560px){
+  .step{grid-template-columns:1fr;gap:6px}
+  .step-label{padding-top:0}
+  .step-label b{display:inline;margin-right:6px}
+  .grp{width:100%}
+  .field input{width:100%}
+  .field{flex:1 1 100%}
+  .where{margin-left:0;width:100%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="band">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">고등학교 과학 · 2022 개정 교육과정</div>
+      <h1>단원과 진로를 잇는 탐구 주제 설계</h1>
+      <p class="lede">과목과 단원, 학생의 희망 진로를 고르면 탐구 주제와 세특 심화 키워드, 세특 문장 초안을 함께 보여 줍니다. 키워드를 누르면 바로 복사됩니다.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-label">STEP 1<b>과목</b></div>
+      <div class="rows" id="subjects"></div>
+    </div>
+    <div class="step">
+      <div class="step-label">STEP 2<b>단원</b></div>
+      <div class="rows"><div class="row" id="units"></div></div>
+    </div>
+    <div class="step">
+      <div class="step-label">STEP 3<b>희망 진로</b></div>
+      <div class="rows"><div class="cgrid" id="careers"></div></div>
+    </div>
+    <div class="step">
+      <div class="step-label">옵션<b>조건</b></div>
+      <div class="rows"><div class="tools">
+        <label class="field" for="major">희망 학과
+          <input id="major" type="text" placeholder="예: 반도체공학과" autocomplete="off"></label>
+        <div class="field">난이도
+          <div class="seg" id="levelSeg">
+            <button type="button" data-v="0" aria-pressed="true">전체</button>
+            <button type="button" data-v="1" aria-pressed="false">기초</button>
+            <button type="button" data-v="2" aria-pressed="false">심화</button>
+          </div></div>
+        <label class="field" for="q">전체 검색
+          <input id="q" type="search" placeholder="예: 반도체, 백신, 태풍" autocomplete="off"></label>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap layout">
+  <main>
+    <div class="res-head"><h2 id="resTitle">추천 탐구 주제</h2><span class="meta" id="resMeta"></span></div>
+    <div class="list" id="list"></div>
+    <div id="others"></div>
+  </main>
+  <aside>
+    <section class="panel" id="kwPanel">
+      <h2>세특 심화 키워드 <button class="btn" type="button" id="copyKw">전체 복사</button></h2>
+      <div id="kwBody"></div>
+    </section>
+    <section class="panel">
+      <h2>담은 주제 <button class="btn" type="button" id="copyBasket">목록 복사</button></h2>
+      <ul class="basket" id="basket"></ul>
+    </section>
+    <section class="panel">
+      <h2>기재 전 확인</h2>
+      <ul class="tip">
+        <li>세특 초안은 예시 문장입니다. 수업 중 실제로 관찰한 활동과 결과로 바꿔 쓰세요.</li>
+        <li>교외 활동, 논문 투고, 특정 대학·기관명 등 기재 금지 항목은 학교생활기록부 기재요령으로 확인하세요.</li>
+        <li>"~할 예정", "~가 기대됨" 같은 미래·추측형 표현보다 수행한 사실 중심으로 적는 편이 좋습니다.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<footer><div class="wrap">단원 구성은 2022 개정 교육과정 과목 체계를 기준으로 정리했습니다. 출판사 교과서마다 단원명과 순서가 다를 수 있습니다. 점선 카드는 단원 개념과 진로 관점을 조합해 자동 생성한 아이디어입니다.</div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+/* ---------- 진로 계열 ---------- */
+const C = {
+  med:{n:'의학·약학·보건',m:'의예·약학·간호·보건·물리치료',k:['진단 정확도','약물 동태','생체 신호','임상 시험','의료 윤리'],l:[['{c} 개념으로 설명하는 인체 생리 현상','문헌'],['{c} 원리가 적용된 의료 진단 기기 분석','문헌']]},
+  bio:{n:'생명과학·바이오',m:'생명과학·생명공학·바이오의약',k:['유전체','바이오마커','세포 배양','합성생물학','생물정보학'],l:[['{c} 개념으로 본 세포·생명 현상','문헌'],['{c} 원리를 활용한 바이오 기술 사례 분석','문헌']]},
+  mech:{n:'기계·자동차·로봇',m:'기계·자동차·로봇·메카트로닉스',k:['동역학','제어 시스템','구동기','내구성','에너지 효율'],l:[['{c} 원리를 적용한 기계 장치 모형 설계','설계'],['{c} 개념으로 분석하는 자동차·로봇 성능','모델링']]},
+  elec:{n:'전기·전자·반도체',m:'전자·전기·반도체공학',k:['회로 설계','센서','반도체 공정','신호 처리','전력 효율'],l:[['{c} 원리를 이용한 센서 회로 제작','설계'],['{c} 개념으로 본 반도체·전자 소자 작동 원리','문헌']]},
+  cs:{n:'컴퓨터·AI·데이터',m:'컴퓨터공학·소프트웨어·AI·데이터사이언스',k:['시뮬레이션','머신러닝','데이터 시각화','알고리즘','수치 해석'],l:[['{c} 개념을 코딩 시뮬레이션으로 구현','모델링'],['{c} 관련 공공 데이터 수집·시각화 분석','데이터']]},
+  chem:{n:'화학공학·신소재',m:'화학공학·신소재·고분자공학',k:['공정 최적화','소재 물성','촉매','나노 구조','수득률'],l:[['{c} 개념으로 해석하는 소재의 물성 차이','실험'],['{c} 원리를 적용한 화학 공정 효율 비교','문헌']]},
+  energy:{n:'에너지·환경',m:'환경공학·에너지공학·기후변화',k:['탄소중립','전과정평가(LCA)','재생에너지','순환경제','환경 영향 평가'],l:[['{c} 관점에서 본 탄소중립 기술 평가','문헌'],['{c} 개념을 활용한 생활 속 에너지 절감 실험','실험']]},
+  civil:{n:'건축·토목·도시',m:'건축학·건축공학·토목·도시공학',k:['구조 안전','내진 설계','친환경 건축','도시 열환경','재료 역학'],l:[['{c} 원리를 적용한 구조물 모형 설계','설계'],['{c} 개념으로 분석하는 도시 환경 문제','조사']]},
+  space:{n:'항공·우주',m:'항공우주공학·천문우주학',k:['궤도 역학','추진 기관','원격 탐사','인공위성','우주 환경'],l:[['{c} 개념으로 본 위성·우주 탐사 기술','문헌'],['{c} 관련 천체 관측 자료 분석','데이터']]},
+  earth:{n:'지구·해양·대기',m:'지구과학·해양학·대기과학·지질학',k:['기후 모델','관측 자료 분석','재해 예측','원격 탐사','지구 시스템'],l:[['{c} 개념으로 해석하는 기상·지질 관측 자료','데이터'],['{c} 관점에서 본 자연재해 예측과 대응','문헌']]},
+  agri:{n:'농생명·식품·수의',m:'농학·식품공학·수의예·원예',k:['스마트팜','식품 안전','발효','작물 생리','동물 복지'],l:[['{c} 원리를 적용한 작물 재배 조건 실험','실험'],['{c} 개념으로 본 식품 가공·저장 과학','실험']]},
+  edu:{n:'교육',m:'과학교육·초등교육',k:['오개념','탐구 수업 설계','모형 활용 수업','과학 소통','평가 루브릭'],l:[['{c} 관련 오개념 조사와 교정 수업 설계','조사'],['{c} 개념을 설명하는 탐구 교구 제작','설계']]},
+  social:{n:'경영·경제·법·정책',m:'경제·경영·법학·행정·사회학',k:['비용-편익 분석','규제','과학기술 정책','리스크 커뮤니케이션','지속가능성'],l:[['{c} 관련 과학기술 정책의 비용-편익 분석','문헌'],['{c} 관련 쟁점에 대한 사회적 인식 설문 조사','조사']]},
+  design:{n:'디자인·예술·미디어',m:'산업·시각디자인·미디어',k:['생체모방','색채 과학','인간공학','정보 시각화','소재 감성'],l:[['{c} 원리를 활용한 제품·공간 디자인 제안','설계'],['{c} 개념을 전달하는 정보 시각화 콘텐츠 제작','설계']]},
+  sport:{n:'체육·스포츠과학',m:'체육교육·스포츠과학·운동재활',k:['생체역학','운동 생리','부상 예방','웨어러블','퍼포먼스 분석'],l:[['{c} 개념으로 분석하는 운동 동작','데이터'],['{c} 원리를 적용한 스포츠 장비 성능 비교','실험']]}
+};
+
+/* ---------- 과목·단원·주제 ----------
+   주제: [제목, 진로, 방법, 난이도(1 기초/2 심화), 심화 키워드, 후속 탐구] */
+const S = [
+ {g:'공통',s:'통합과학1',u:[
+  {n:'과학의 기초',c:['기본량과 단위','측정과 어림','측정 표준','디지털 정보','센서'],t:[
+   ['스마트폰 센서(가속도·조도) 측정값의 오차 분석과 보정','cs elec sport','실험',1,'측정 불확도,유효숫자,캘리브레이션,반복 측정','여러 센서 값을 결합하는 센서 융합 기법 조사'],
+   ['2019년 SI 기본단위 재정의와 정밀 측정 산업','elec social edu','문헌',1,'플랑크 상수,킬로그램 원기,측정 표준,계량','산업 분야별 측정 표준 적용 사례 비교'],
+   ['의료 신호의 디지털 변환(표본화·양자화)과 진단 정확도','med elec cs','모델링',2,'표본화 정리,양자화 오차,신호 대 잡음비,심전도','공개 심전도 데이터로 표본화율을 바꿔 파형 비교'],
+   ['웨어러블 기기 심박 측정값의 정확도 비교','sport med design','실험',1,'광혈류측정(PPG),상대 오차,재현성','운동 강도별 측정 오차 변화 분석']]},
+  {n:'물질과 규칙성',c:['원소의 생성','주기율표','화학 결합','생명체 구성 물질','신소재'],t:[
+   ['별의 스펙트럼으로 원소 생성 과정 추론하기','space earth edu','데이터',1,'흡수 스펙트럼,핵융합,원소 존재비,분광기','간이 분광기로 기체 방전관 선스펙트럼 관찰'],
+   ['이온 결합 물질의 전기 전도성과 전해질 음료 분석','med agri sport chem','실험',1,'전해질,이온화,전기 전도도,삼투압','농도별 전도도 검량선 작성'],
+   ['그래핀·초전도체 신소재의 구조와 성질의 관계','chem elec mech','문헌',2,'탄소 동소체,전자 이동도,임계 온도,마이스너 효과','상용화 장벽(공정 비용·안정성) 비교'],
+   ['단백질·DNA를 이루는 단위체의 규칙성','bio med','문헌',1,'아미노산,뉴클레오타이드,펩타이드 결합,상보적 결합','단백질 구조 데이터베이스로 3차 구조 관찰'],
+   ['규산염 광물 구조와 시멘트·유리의 성질','civil chem design','문헌',1,'규산염 사면체,시멘트 수화,비정질 고체','저탄소 시멘트 기술 조사']]},
+  {n:'시스템과 상호작용',c:['중력과 운동','운동량과 충격량','지구 시스템','생명 시스템','세포막'],t:[
+   ['충격량 관점에서 본 에어백·헬멧의 안전 설계','mech design sport','실험',1,'충격량,충돌 시간,평균 힘,크럼플 존','완충재 두께별 충돌 시간 측정'],
+   ['낙상 충격을 줄이는 보호대 소재 비교','med sport chem','실험',1,'충격 흡수,탄성,에너지 소산,고령자 낙상','고령자 보호 장구 설계 개선안 제시'],
+   ['세포막 투과 모형 실험과 약물 전달','med bio','실험',1,'확산,삼투,선택적 투과성,약물 전달 시스템','분자 크기별 투과 속도 비교'],
+   ['엘니뇨로 본 지구 시스템 권역 간 상호작용','earth energy social','데이터',2,'수권,기권,해수면 온도 편차,에너지 흐름','엘니뇨 해의 국내 기상 변화 분석'],
+   ['온도·pH에 따른 효소 반응 속도','bio agri chem','실험',1,'활성화 에너지,최적 온도,기질 특이성','산업용 효소의 내열성 사례 조사']]}]},
+ {g:'공통',s:'통합과학2',u:[
+  {n:'변화와 다양성',c:['지질 시대','자연선택과 진화','생물다양성','산화와 환원','산과 염기의 중화'],t:[
+   ['지역 하천의 생물다양성 지수 조사','energy earth agri edu','조사',1,'심프슨 지수,종 풍부도,지표종,서식지 단편화','계절별 반복 조사로 변화 추적'],
+   ['항생제 내성 세균 출현을 자연선택으로 설명하기','med bio','문헌',2,'변이,선택압,슈퍼박테리아,항생제 오남용','국내 항생제 사용량 통계 분석'],
+   ['중화 반응을 이용한 제산제 성능 비교','med chem','실험',1,'중화 적정,지시약,위산,중화열','제산제 성분별 중화 용량 계산'],
+   ['철의 부식 조건 비교와 부식 방지 기술','civil mech chem','실험',1,'산화·환원,희생 양극,도금,부동태','교량·선박의 방식 사례 조사'],
+   ['해양 산성화가 탄산칼슘 껍질에 미치는 영향','earth energy agri','실험',2,'pH,탄산염 평형,산호 백화,완충 용액','양식업 피해 사례와 대응 정책 조사']]},
+  {n:'환경과 에너지',c:['생태계 평형','기후변화','에너지 전환','발전기와 전력 수송','신재생 에너지'],t:[
+   ['태양전지 각도·온도에 따른 발전 효율 측정','energy elec civil','실험',1,'광전 효과,변환 효율,입사각,최대 전력점','계절별 최적 설치각 계산'],
+   ['고전압 송전으로 전력 손실을 줄이는 원리','elec energy','모델링',2,'줄 열,변압기,전력 손실,스마트 그리드','초고압 직류송전(HVDC) 사례 비교'],
+   ['도시 열섬 측정과 녹지·쿨루프의 효과','civil earth design','조사',1,'알베도,지표 온도,열섬 강도','교내 지점별 온도 지도 제작'],
+   ['탄소 배출 통계로 본 탄소중립 정책 분석','social energy','데이터',2,'온실가스 인벤토리,탄소세,배출권 거래제,넷제로','국가별 감축 목표 비교'],
+   ['소형 풍력 발전기 날개 설계와 출력 비교','mech energy design','설계',1,'전자기 유도,베츠 한계,받음각','날개 수·길이 변인 확장']]},
+  {n:'과학과 미래 사회',c:['감염병 예측','빅데이터','인공지능','과학 기술 윤리'],t:[
+   ['감염병 확산 SIR 모델을 스프레드시트로 구현','med cs social','모델링',2,'기초감염재생산수,SIR 모델,집단 면역','백신 접종률 변수 추가'],
+   ['공공 데이터로 본 미세먼지와 호흡기 질환의 상관관계','med cs earth','데이터',2,'상관계수,인과와 상관,교란 변수,PM2.5','지역·계절별 층화 분석'],
+   ['AI 이미지 분류기의 편향과 과학 기술 윤리','cs social design','데이터',2,'학습 데이터 편향,설명 가능한 AI,알고리즘 공정성','간단한 분류 모델로 편향 재현 실험'],
+   ['신속항원검사와 PCR 검사의 민감도·특이도 비교','med bio','문헌',1,'민감도,특이도,위음성,항원-항체 반응','유병률에 따른 양성 예측도 계산']]}]},
+ {g:'일반선택',s:'물리학',u:[
+  {n:'힘과 에너지',c:['뉴턴 운동 법칙','운동량 보존','역학적 에너지','열역학 법칙','특수 상대성 이론'],t:[
+   ['동영상 분석으로 빗면 운동의 마찰 계수 측정','mech sport edu','실험',1,'동영상 분석(Tracker),운동 마찰 계수,가속도','표면 재질별 비교'],
+   ['점프·투구 동작의 역학적 에너지 분석','sport mech med','데이터',1,'운동 에너지,위치 에너지,일률,생체역학','숙련도에 따른 에너지 전달 효율 비교'],
+   ['열기관 효율과 히트펌프 성능계수 비교','mech energy','문헌',2,'카르노 효율,성능계수,엔트로피,히트펌프','가정용 냉난방기 효율 등급 분석'],
+   ['GPS 위성의 상대론적 시간 보정','space cs elec','모델링',2,'시간 지연,중력 시간 지연,위성 항법','보정 미적용 시 위치 오차 계산']]},
+  {n:'전기와 자기',c:['전기장과 전위','축전기','자기장','전자기 유도','반도체 소자'],t:[
+   ['코일 간격에 따른 무선 충전 효율','elec mech','실험',1,'상호 유도,결합 계수,공진,자기 공명','코일 감은 수·코어 재질 변인 확장'],
+   ['LED 색에 따른 문턱 전압과 띠틈 에너지','elec chem design','실험',2,'띠틈,p-n 접합,문턱 전압','플랑크 상수 추정 실험'],
+   ['MRI 영상의 물리적 원리','med elec','문헌',2,'핵자기 공명,초전도 자석,라모어 진동수','CT·초음파와 원리·장단점 비교'],
+   ['정전 용량 방식 터치스크린 원리','elec cs design','실험',1,'축전기,정전 용량,유전체','간이 터치 센서 제작']]},
+  {n:'빛과 물질',c:['파동의 간섭','굴절과 렌즈','빛의 이중성','물질파','에너지 준위'],t:[
+   ['편광 필름으로 투명 플라스틱 내부 응력 관찰','civil mech design','실험',1,'광탄성,복굴절,응력 집중','구조 모형의 하중별 응력 분포 비교'],
+   ['광섬유 전반사와 통신 신호 손실','elec cs','실험',1,'임계각,전반사,감쇠,광통신','굽힘 반경에 따른 손실 측정'],
+   ['전자현미경 분해능과 물질파','bio chem med','문헌',2,'드브로이 파장,분해능,회절 한계','광학·전자 현미경 관찰 대상 비교'],
+   ['박막 간섭과 생물의 구조색','design bio chem','실험',1,'박막 간섭,구조색,생체모방','구조색 응용 소재 사례 조사']]}]},
+ {g:'일반선택',s:'화학',u:[
+  {n:'화학의 언어',c:['몰','화학 반응식','양적 관계','용액의 농도'],t:[
+   ['의약품 복용량 계산과 몰 농도','med chem','조사',1,'몰 농도,체중당 용량,반감기','소아·성인 용량 차이 분석'],
+   ['탄산수소나트륨 열분해로 양적 관계 검증','chem agri edu','실험',1,'화학량론,수득률,한계 반응물','수득률 오차 원인 분석'],
+   ['식품 성분표의 나트륨·당 함량 단위 변환','agri med social','데이터',1,'질량 백분율,ppm,일일 섭취 기준','청소년 섭취 실태 조사']]},
+  {n:'물질의 구조와 성질',c:['전자 배치','주기적 성질','화학 결합','분자 구조와 극성','분자 간 힘'],t:[
+   ['계면활성제 구조와 세정력 비교','chem bio design','실험',1,'친수성·소수성,미셀,임계 미셀 농도','천연 계면활성제와 비교'],
+   ['분자 극성과 약물 흡수(지용성·수용성)','med bio','문헌',2,'분배 계수(logP),수소 결합,세포막 투과','혈뇌장벽 통과 약물 조건 조사'],
+   ['물의 수소 결합과 비열, 기후 조절','earth energy','실험',1,'수소 결합,비열,기화열','해안·내륙 기온 일교차 데이터 비교'],
+   ['고분자 구조와 플라스틱 분해성 비교','chem energy design','실험',2,'생분해성 고분자,PLA,가수분해,미세플라스틱','분해 조건(온도·미생물) 확장']]},
+  {n:'화학 평형',c:['가역 반응','동적 평형','평형 상수','르샤틀리에 원리','산·염기 평형'],t:[
+   ['혈액 완충 작용과 산증','med bio sport','실험',2,'완충 용액,헨더슨-하셀바흐 식,젖산','운동 후 젖산 축적과 연결'],
+   ['하버-보슈 공정 조건과 식량 생산','chem agri social','문헌',2,'평형 이동,촉매,수득률,질소 고정','그린 암모니아 기술 조사'],
+   ['적양배추 지시약으로 생활 속 물질 pH 측정','agri edu design','실험',1,'안토시아닌,변색 범위,pH','pH 색상 표 시각화 자료 제작']]},
+  {n:'역동적인 화학 반응',c:['반응 속도','촉매','산화·환원','반응열'],t:[
+   ['효소와 금속 촉매의 과산화수소 분해 속도 비교','chem bio','실험',1,'활성화 에너지,촉매,반응 속도 상수','온도별 속도 상수로 활성화 에너지 추정'],
+   ['리튬 이온 전지의 산화·환원과 차세대 전지','elec energy chem mech','문헌',2,'산화 환원 전위,전고체 전지,덴드라이트','전지 화재 사고 원인 분석'],
+   ['손난로·냉각팩 반응열 측정','chem design sport','실험',1,'발열·흡열,엔탈피,열량계','제품 지속 시간 개선 설계'],
+   ['과일 갈변 반응 억제 조건 비교','agri chem','실험',1,'폴리페놀 산화효소,항산화제,산화','식품 산업의 갈변 방지 기술 조사']]}]},
+ {g:'일반선택',s:'생명과학',u:[
+  {n:'생명 시스템의 구성',c:['세포 구조','생명체 구성 물질','세포막 수송','효소'],t:[
+   ['식물 세포 원형질 분리 관찰과 세포액 농도 추정','agri bio','실험',1,'삼투,원형질 분리,등장액','염해 토양의 작물 피해와 연결'],
+   ['오가노이드와 세포 배양 기술','bio med','문헌',2,'줄기세포,3D 배양,동물 실험 대체','신약 개발 단계별 활용 조사']]},
+  {n:'항상성과 몸의 기능',c:['신경계','호르몬','혈당 조절','면역'],t:[
+   ['운동 전후 심박·호흡 변화와 자율 신경','sport med','실험',1,'교감·부교감 신경,심박 변이도,최대 산소 섭취량','회복 속도 개인차 분석'],
+   ['혈당 조절 호르몬과 연속혈당측정기','med elec cs','문헌',2,'인슐린,글루카곤,효소 센서','인공 췌장 시스템 조사'],
+   ['mRNA 백신의 작동 원리','med bio','문헌',2,'기억 세포,2차 면역 반응,지질 나노입자','백신 플랫폼별 비교'],
+   ['반응 시간 측정으로 신경 전달 과정 이해','sport edu cs','실험',1,'시냅스,반응 시간,활동 전위','자극 종류별 반응 시간 비교 프로그램 제작']]},
+  {n:'유전',c:['유전자와 염색체','세포 분열','사람의 유전','돌연변이'],t:[
+   ['가계도 분석과 유전 상담','med bio social','문헌',1,'상염색체 유전,반성 유전,유전 상담','유전 정보 차별 금지 제도 조사'],
+   ['체세포 분열 관찰과 세포 주기','bio med','실험',1,'세포 주기,분열 지수,암세포','항암제의 세포 주기 표적 조사']]},
+  {n:'생태계와 상호작용',c:['개체군','군집','물질 순환','에너지 흐름'],t:[
+   ['개체군 생장 곡선 모델링','bio cs agri','모델링',2,'환경 수용력,로지스틱 생장','포식-피식 모델로 확장'],
+   ['학교 숲의 탄소 흡수량 추정','energy civil agri','조사',1,'상대생장식,바이오매스,탄소 흡수원','수종별 흡수량 비교']]}]},
+ {g:'일반선택',s:'지구과학',u:[
+  {n:'지구의 변동',c:['판 구조론','지진과 화산','지질 구조','지구 내부 구조'],t:[
+   ['지진파 자료로 진앙 결정하기','earth civil cs','데이터',1,'P파·S파,PS시,진앙 삼각측량','국내 지진 관측 자료 분석'],
+   ['구조 모형 진동 실험으로 본 내진 설계','civil mech design','설계',1,'고유 진동수,공진,면진,제진','층수별 공진 진동수 측정'],
+   ['화산재가 항공 운항에 미치는 영향','space earth','문헌',1,'화산재,성층권 에어로졸,제트 엔진','화산 폭발과 기온 변화 자료 분석']]},
+  {n:'대기와 해양의 상호작용',c:['대기 대순환','해수 순환','엘니뇨와 라니냐','태풍','기후변화'],t:[
+   ['태풍 강도와 해수면 온도의 관계 분석','earth energy social','데이터',2,'잠열,해수면 온도,전향력','태풍 피해액 추이와 연결'],
+   ['수온·염분에 따른 밀도류 실험','earth energy','실험',1,'열염분 순환,밀도,심층 해류','빙하 융해수 유입 조건 추가'],
+   ['기상 자료와 농작물 생산량의 관계','agri social cs','데이터',2,'적산 온도,기후 리스크','작물별 재배 적지 변화 예측']]},
+  {n:'우주의 구조와 진화',c:['별의 진화','은하','우주 팽창','암흑 물질'],t:[
+   ['허블 법칙 자료로 우주 나이 추정','space edu cs','데이터',2,'적색 편이,허블 상수,후퇴 속도','허블 긴장 논쟁 조사'],
+   ['별의 색과 표면 온도(빈 법칙)','space design elec','실험',1,'흑체 복사,색지수,빈 변위 법칙','조명 색온도와 연결'],
+   ['광해 조사와 도시 조명 정책','civil social earth','조사',1,'광해,하늘 밝기(SQM),생체 리듬','지역별 야간 밝기 지도 제작']]}]},
+ {g:'진로선택',s:'역학과 에너지',u:[
+  {n:'시공간과 운동',c:['포물선 운동','원운동','케플러 법칙','단진동'],t:[
+   ['인공위성 궤도와 케플러 법칙','space mech','모델링',2,'궤도 속도,정지 궤도,호만 전이','저궤도 위성군 배치 조사'],
+   ['곡선 도로 경사(뱅크각) 설계','civil mech','모델링',2,'구심력,마찰,뱅크각','제한 속도 설정 근거 분석'],
+   ['공기 저항을 고려한 투사 최적 각도','sport mech cs','실험',1,'항력,수치 해석,발사각','코딩 시뮬레이션과 실측 비교']]},
+  {n:'열과 에너지',c:['열역학 법칙','열기관','엔트로피','열전달'],t:[
+   ['단열재 종류에 따른 열전달 비교','civil energy design','실험',1,'열전도도,단열,패시브 하우스','두께·재질별 경제성 분석'],
+   ['체온 조절과 열 손실','med sport','실험',1,'대류,복사,증발 냉각','기능성 의류 소재 비교']]},
+  {n:'탄성파와 소리',c:['파동의 전파','정상파','음향','도플러 효과'],t:[
+   ['초음파 진단의 반사 원리','med elec','문헌',2,'음향 임피던스,도플러 초음파','매질별 반사율 계산'],
+   ['방음벽·흡음재의 소음 저감 효과','civil design energy','실험',1,'데시벨,흡음률,상쇄 간섭,능동 소음 제어','교실 소음 지도 제작'],
+   ['악기의 정상파와 음색 분석','design edu','실험',1,'배음,푸리에 분석,공명','음색 시각화 자료 제작']]}]},
+ {g:'진로선택',s:'전자기와 양자',u:[
+  {n:'전자기장',c:['쿨롱 법칙','전위','자기력','전자기 유도'],t:[
+   ['전기차 회생 제동 원리','mech elec energy','문헌',2,'렌츠 법칙,회생 제동,모터-발전기','주행 조건별 회수 에너지 추정'],
+   ['자기 부상 열차의 원리','mech civil','문헌',2,'반자성,초전도,선형 전동기','부상 방식별 장단점 비교']]},
+  {n:'빛과 정보 통신',c:['전자기파','편광','디스플레이','정보 통신'],t:[
+   ['OLED와 LCD 디스플레이 구조 비교','elec design chem','문헌',1,'편광,액정,유기 발광','소비 전력·색재현율 비교'],
+   ['5G·6G 주파수 대역과 전파 특성','elec cs social','문헌',2,'주파수,회절,밀리미터파','주파수 경매 정책 조사']]},
+  {n:'양자와 미시 세계',c:['광전 효과','불확정성 원리','터널 효과','양자 정보'],t:[
+   ['양자 컴퓨터의 큐비트와 중첩','cs elec','문헌',2,'중첩,얽힘,양자 암호','고전 암호 체계에 미치는 영향'],
+   ['터널 효과와 플래시 메모리','elec cs','문헌',2,'터널 효과,부유 게이트,낸드 플래시','반도체 미세 공정 한계 조사']]}]},
+ {g:'진로선택',s:'물질과 에너지',u:[
+  {n:'물질의 상태와 용액',c:['기체 법칙','증기 압력','총괄성','용액의 농도'],t:[
+   ['수액의 삼투압과 등장성','med bio','실험',1,'삼투압,총괄성,등장액','적혈구 모형으로 저장·고장액 비교'],
+   ['제설제 종류별 어는점 내림 비교','civil chem energy','실험',1,'어는점 내림,반트호프 인자,염화칼슘','친환경 제설제 조사']]},
+  {n:'반응열과 열역학',c:['엔탈피','헤스 법칙','엔트로피','자유 에너지'],t:[
+   ['연료별 연소열과 탄소 배출 비교','energy chem social','실험',2,'연소 엔탈피,헤스 법칙,수소 연료','연료 전환 정책 비용 분석']]}]},
+ {g:'진로선택',s:'화학 반응의 세계',u:[
+  {n:'산·염기와 산화·환원',c:['산 염기 평형','산화 환원 반응','전기 화학'],t:[
+   ['아이오딘 적정으로 음료 속 비타민 C 정량','agri med chem','실험',1,'산화 환원 적정,항산화','보관 온도·기간별 함량 변화'],
+   ['수소 연료전지와 수전해 원리','energy mech chem','문헌',2,'연료전지,수전해,그린 수소','수소 생산 방식별 탄소 배출 비교']]},
+  {n:'반응 속도와 촉매',c:['반응 속도식','활성화 에너지','촉매'],t:[
+   ['자동차 삼원 촉매의 원리','mech energy chem','문헌',2,'백금족 금속,질소산화물,배기가스','촉매 금속 대체 연구 조사'],
+   ['광촉매(TiO₂)의 오염 물질 분해','energy chem civil','실험',2,'광촉매,띠틈,유기 염료 분해','광촉매 코팅 건축 자재 조사']]}]},
+ {g:'진로선택',s:'세포와 물질대사',u:[
+  {n:'세포',c:['세포 소기관','막 단백질','세포 신호 전달'],t:[
+   ['막 수용체와 표적 치료제','med bio','문헌',2,'수용체,리간드,표적 항암제','내성 발생 기전 조사']]},
+  {n:'물질대사',c:['세포 호흡','광합성','발효'],t:[
+   ['조건에 따른 효모 발효와 CO₂ 발생량','agri bio chem','실험',1,'알코올 발효,해당 과정','발효 식품 산업 사례 조사'],
+   ['LED 파장에 따른 광합성 속도(스마트팜)','agri elec bio','실험',1,'작용 스펙트럼,광포화점,스마트팜','광량 대비 전력 효율 분석'],
+   ['운동 강도별 에너지 대사','sport med','문헌',1,'ATP,젖산 역치,유산소·무산소 대사','훈련 강도 설계에 적용']]}]},
+ {g:'진로선택',s:'생물의 유전',u:[
+  {n:'유전자와 발현',c:['DNA 복제','전사와 번역','유전자 발현 조절'],t:[
+   ['후성유전과 생활 습관','med bio','문헌',2,'DNA 메틸화,히스톤 변형','쌍둥이 연구 사례 조사'],
+   ['BLAST로 DNA 서열 비교와 계통 분석','cs bio med','데이터',2,'서열 정렬,상동성,계통수','바이러스 변이 서열 비교']]},
+  {n:'생명 공학 기술',c:['유전자 재조합','PCR','유전체 편집'],t:[
+   ['CRISPR 유전자 편집의 윤리 쟁점','social bio med','문헌',2,'Cas9,생명 윤리,생식세포 편집','국가별 규제 비교'],
+   ['GMO 작물 안전성 논쟁','agri social','문헌',1,'형질 전환,위해성 평가,표시제','소비자 인식 설문 조사'],
+   ['브로콜리·바나나 DNA 추출 실험','bio edu agri','실험',1,'세포 용해,에탄올 침전','추출 조건별 수득량 비교']]}]},
+ {g:'진로선택',s:'지구시스템과학',u:[
+  {n:'지권의 변화',c:['판 구조','암석의 순환','지질 자원'],t:[
+   ['지역 지질 답사와 지층 해석','earth edu civil','조사',1,'지층,주상절리,지질 공원','답사 안내 자료 제작'],
+   ['핵심 광물 자원 분포와 공급망','social earth elec','조사',2,'희토류,리튬,자원 안보','재활용(도시 광산) 기술 조사']]},
+  {n:'대기와 해양 순환',c:['대기 안정도','해류','물질 순환'],t:[
+   ['해류와 해양 미세플라스틱 분포','energy earth chem','조사',2,'표층 순환,미세플라스틱,쓰레기 섬','해안 쓰레기 성분 조사'],
+   ['대기 안정도와 미세먼지 축적','earth med civil','데이터',2,'기온 역전,대기 경계층','풍속·습도 변수 추가 분석']]}]},
+ {g:'진로선택',s:'행성우주과학',u:[
+  {n:'태양계와 탐사',c:['행성의 특성','궤도 운동','탐사 기술'],t:[
+   ['행성 탐사선의 스윙바이 궤도','space mech','모델링',2,'중력 도움,델타 v,궤도 전이','국내 달 탐사 궤도 조사'],
+   ['외계 행성 통과 측광 자료 분석','space cs','데이터',2,'통과법,광도 곡선,생명 가능 지대','행성 반지름 계산']]},
+  {n:'우주 탐구',c:['우주 환경','관측 기술','우주 개발'],t:[
+   ['우주 환경이 인체에 미치는 영향','med space sport','문헌',2,'미세 중력,골밀도 감소,우주 방사선','장기 체류 운동 처방 조사'],
+   ['우주 쓰레기 문제와 국제 규범','social space','문헌',1,'케슬러 증후군,궤도 잔해,우주 조약','제거 기술 비교']]}]}
+];
+
+const METHOD_SENT = {
+ '실험':'변인을 통제한 실험을 설계하고 반복 측정하여 평균과 오차를 분석함.',
+ '데이터':'공공 데이터를 수집·정리하고 그래프로 시각화하여 변수 간 관계를 해석함.',
+ '문헌':'관련 학술 자료와 보도 자료를 비교·분석하여 과학적 원리와 사회적 쟁점을 정리함.',
+ '모델링':'수식과 스프레드시트(또는 코딩)로 모델을 구현하고 조건을 바꾸어 결과를 예측함.',
+ '설계':'시제품을 설계·제작하고 성능 시험 결과를 바탕으로 개선안을 도출함.',
+ '조사':'조사 계획을 세워 자료를 수집하고 지표를 산출하여 결과를 비교함.'
+};
+const EXT_DEFAULT = {
+ '실험':'변인을 하나 더 추가하거나 측정 도구를 바꾸어 재현성 검증',
+ '데이터':'기간·지역을 넓혀 추가 자료로 경향성 확인',
+ '문헌':'최신 연구 동향과 실제 적용 사례 비교',
+ '모델링':'모델 결과를 실측값과 비교해 오차 원인 분석',
+ '설계':'성능 평가 기준을 세워 개선 시제품 제작',
+ '조사':'조사 대상을 넓혀 비교 분석'
+};
+const ROMAN=['Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ'];
+
+/* ---------- state ---------- */
+const st = {si:4, ui:1, c:'elec', lv:0, q:'', major:''};
+let basket = [];
+try{ const b = JSON.parse(localStorage.getItem('seteuk-basket')||'[]'); if(Array.isArray(b)) basket=b; }catch(e){}
+try{ const p = JSON.parse(localStorage.getItem('seteuk-state')||'null'); if(p && S[p.si] && S[p.si].u[p.ui]) Object.assign(st,{si:p.si,ui:p.ui,c:p.c in C||p.c==='all'?p.c:'elec',major:p.major||''}); }catch(e){}
+const save=()=>{try{localStorage.setItem('seteuk-basket',JSON.stringify(basket));localStorage.setItem('seteuk-state',JSON.stringify({si:st.si,ui:st.ui,c:st.c,major:st.major}))}catch(e){}};
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+function toTopic(raw,si,ui){
+ return {title:raw[0],cs:raw[1].split(' '),m:raw[2],lv:raw[3],k:raw[4].split(','),x:raw[5]||EXT_DEFAULT[raw[2]],si,ui,gen:false};
+}
+function genTopics(si,ui,cid,need){
+ const unit=S[si].u[ui], car=C[cid], out=[];
+ for(let i=0;i<need;i++){
+  const lens=car.l[i%car.l.length], concept=unit.c[(i+ (i>=car.l.length?1:0)) % unit.c.length];
+  out.push({title:lens[0].replace('{c}',concept),cs:[cid],m:lens[1],lv:1,k:[concept,car.k[i%car.k.length],car.k[(i+2)%car.k.length]],x:EXT_DEFAULT[lens[1]],si,ui,gen:true});
+ }
+ return out;
+}
+function draft(t){
+ const unit=S[t.si].u[t.ui], sub=S[t.si].s;
+ const cid = st.c!=='all' && t.cs.includes(st.c) ? st.c : t.cs[0];
+ const interest = st.major.trim() || C[cid].n;
+ return `${sub} ‘${unit.n}’ 단원 학습 내용을 바탕으로 희망 진로(${interest}) 분야와 연계하여 ‘${t.title}’ 주제로 탐구를 수행함. ${METHOD_SENT[t.m]} 탐구 과정에서 ${t.k[0]}·${t.k[1]}의 의미를 근거를 들어 설명하고, 결과의 한계를 짚어 후속 탐구 방향(${t.x})을 제시함. 교과 개념을 진로 분야의 실제 문제에 적용하는 과학적 사고력이 돋보임.`;
+}
+const key=t=>t.si+'|'+t.ui+'|'+t.title;
+
+/* ---------- render pickers ---------- */
+function renderSubjects(){
+ const groups=['공통','일반선택','진로선택'];
+ $('subjects').innerHTML = groups.map(g=>`<div class="row"><span class="grp">${g}</span>${
+   S.map((s,i)=>s.g===g?`<button type="button" class="chip" data-si="${i}" aria-pressed="${i===st.si}">${esc(s.s)}</button>`:'').join('')}</div>`).join('');
+}
+function renderUnits(){
+ $('units').innerHTML = S[st.si].u.map((u,i)=>`<button type="button" class="chip" data-ui="${i}" aria-pressed="${i===st.ui}"><span class="num">${ROMAN[i]}</span>${esc(u.n)}</button>`).join('');
+}
+function renderCareers(){
+ const all=`<button type="button" class="chip" data-c="all" aria-pressed="${st.c==='all'}">전체 진로<small>단원의 모든 주제</small></button>`;
+ $('careers').innerHTML = all + Object.entries(C).map(([id,c])=>`<button type="button" class="chip" data-c="${id}" aria-pressed="${st.c===id}">${esc(c.n)}<small>${esc(c.m)}</small></button>`).join('');
+}
+
+/* ---------- cards ---------- */
+function card(t,dim){
+ const saved = basket.some(b=>b.key===key(t));
+ const unit=S[t.si].u[t.ui];
+ const where = (st.q||dim===2) ? `<span class="where">${esc(S[t.si].s)} ${ROMAN[t.ui]}. ${esc(unit.n)}</span>` : '';
+ return `<article class="card${dim?' dim':''}${t.gen?' gen':''}" data-key="${esc(key(t))}">
+  <div class="tags"><span class="stamp">${t.m}</span><span class="lvl${t.lv===2?' hi':''}">${t.lv===2?'심화':'기초'}</span>
+   ${t.gen?'<span class="ctag">조합형 아이디어</span>':t.cs.map(c=>`<span class="ctag">${esc(C[c].n)}</span>`).join('')}${where}</div>
+  <h3>${esc(t.title)}</h3>
+  <div class="kws">${t.k.map(k=>`<button type="button" class="kw" data-copy="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+  <p class="ext"><b>후속 탐구</b> ${esc(t.x)}</p>
+  <div class="actions">
+   <button type="button" class="btn" data-act="draft">세특 초안 보기</button>
+   <button type="button" class="btn${saved?' on':''}" data-act="save">${saved?'담김':'담기'}</button>
+  </div>
+  <div class="draftbox" hidden>
+   <pre class="draft">${esc(draft(t))}</pre>
+   <div class="actions" style="margin-top:8px"><button type="button" class="btn" data-act="copydraft">초안 복사</button><span class="note">실제 관찰 내용으로 수정해 사용하세요.</span></div>
+  </div>
+ </article>`;
+}
+
+let shown=[]; const topicMap=new Map();
+function render(){
+ renderSubjects(); renderUnits(); renderCareers();
+ document.querySelectorAll('#levelSeg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.v===st.lv)));
+ const lvOk=t=>!st.lv||t.lv===st.lv;
+ topicMap.clear();
+ let main=[], others=[];
+ if(st.q.trim()){
+  const q=st.q.trim().toLowerCase();
+  S.forEach((s,si)=>s.u.forEach((u,ui)=>u.t.forEach(r=>{
+   const t=toTopic(r,si,ui);
+   const hay=(t.title+' '+t.k.join(' ')+' '+u.n+' '+s.s+' '+u.c.join(' ')).toLowerCase();
+   if(hay.includes(q)&&lvOk(t)&&(st.c==='all'||t.cs.includes(st.c))) main.push(t);
+  })));
+  $('resTitle').textContent=`‘${st.q.trim()}’ 검색 결과`;
+  $('resMeta').textContent=`${main.length}개 · ${st.c==='all'?'전체 진로':C[st.c].n}`;
+ } else {
+  const unit=S[st.si].u[st.ui];
+  const all=unit.t.map(r=>toTopic(r,st.si,st.ui));
+  if(st.c==='all'){ main=all.filter(lvOk); }
+  else{
+   main=all.filter(t=>t.cs.includes(st.c)&&lvOk(t));
+   others=all.filter(t=>!t.cs.includes(st.c)&&lvOk(t));
+   const need=Math.max(0,3-main.length);
+   if(need&&st.lv!==2) main=main.concat(genTopics(st.si,st.ui,st.c,need));
+  }
+  $('resTitle').textContent=`${S[st.si].s} ${ROMAN[st.ui]}. ${unit.n}`;
+  $('resMeta').textContent=st.c==='all'?`전체 진로 · ${main.length}개`:`${C[st.c].n} 연계 · ${main.length}개`;
+ }
+ shown=main.concat(others);
+ shown.forEach(t=>topicMap.set(key(t),t));
+ $('list').innerHTML = main.length?main.map(t=>card(t,st.q?2:0)).join(''):`<p class="empty">조건에 맞는 주제가 없습니다. 난이도를 ‘전체’로 바꾸거나 다른 진로를 골라 보세요.</p>`;
+ $('others').innerHTML = others.length?`<div class="sub">같은 단원, 다른 진로 연계 주제 (변형해서 활용)</div><div class="list">${others.map(t=>card(t,1)).join('')}</div>`:'';
+ renderKw(main); renderBasket(); save();
+}
+
+function chipList(arr){return `<div class="kws">${arr.map(k=>`<button type="button" class="kw" data-copy="${esc(k)}">${esc(k)}</button>`).join('')}</div>`}
+let kwAll=[];
+function renderKw(main){
+ const unitC = st.q?[]:S[st.si].u[st.ui].c;
+ const carK = st.c==='all'?[]:C[st.c].k;
+ const topK=[...new Set(main.flatMap(t=>t.k))].filter(k=>!unitC.includes(k)).slice(0,18);
+ kwAll=[...new Set([...unitC,...carK,...topK])];
+ let h='';
+ if(unitC.length) h+=`<div><h3>단원 핵심 개념</h3>${chipList(unitC)}</div>`;
+ if(carK.length) h+=`<div><h3>진로 연계 키워드 · ${esc(C[st.c].n)}</h3>${chipList(carK)}</div>`;
+ if(topK.length) h+=`<div><h3>주제별 심화 키워드</h3>${chipList(topK)}</div>`;
+ $('kwBody').innerHTML=h||'<p class="empty">표시할 키워드가 없습니다.</p>';
+}
+function renderBasket(){
+ $('basket').innerHTML = basket.length?basket.map((b,i)=>`<li><span>${esc(b.title)}<small>${esc(b.where)} · ${esc(b.m)}</small></span><button type="button" class="x" data-rm="${i}" aria-label="빼기">×</button></li>`).join(''):'<li style="border:0;padding:0"><p class="empty">카드의 ‘담기’를 누르면 학생별 후보 주제를 모아 둘 수 있어요. 이 브라우저에만 저장됩니다.</p></li>';
+}
+
+/* ---------- copy ---------- */
+let tt;
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),1600)}
+function copy(text,label,fallbackEl){
+ const done=()=>toast(label+' 복사됨');
+ const fb=()=>{
+  if(fallbackEl){const r=document.createRange();r.selectNodeContents(fallbackEl);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('선택했어요. Ctrl+C로 복사하세요');}
+  else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();ok?done():toast('복사가 막혀 있어요. 직접 선택해 복사하세요');}
+ };
+ try{ navigator.clipboard.writeText(text).then(done,fb); }catch(e){ fb(); }
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button'); if(!b) return;
+ if(b.dataset.si!==undefined){st.si=+b.dataset.si;st.ui=0;st.q='';$('q').value='';render();return}
+ if(b.dataset.ui!==undefined){st.ui=+b.dataset.ui;st.q='';$('q').value='';render();return}
+ if(b.dataset.c!==undefined){st.c=b.dataset.c;render();return}
+ if(b.closest('#levelSeg')){st.lv=+b.dataset.v;render();return}
+ if(b.dataset.copy!==undefined){copy(b.dataset.copy,`‘${b.dataset.copy}’`);return}
+ if(b.dataset.rm!==undefined){basket.splice(+b.dataset.rm,1);save();render();return}
+ if(b.id==='copyKw'){copy(kwAll.join(', '),'키워드');return}
+ if(b.id==='copyBasket'){
+  if(!basket.length){toast('담은 주제가 없어요');return}
+  copy(basket.map((x,i)=>`${i+1}. ${x.title} (${x.where}, ${x.m})\n   키워드: ${x.k.join(', ')}`).join('\n'),'목록');return}
+ const cardEl=b.closest('.card'); if(!cardEl) return;
+ const t=topicMap.get(cardEl.dataset.key); if(!t) return;
+ if(b.dataset.act==='draft'){const box=cardEl.querySelector('.draftbox');box.hidden=!box.hidden;b.textContent=box.hidden?'세특 초안 보기':'세특 초안 닫기';return}
+ if(b.dataset.act==='copydraft'){copy(draft(t),'세특 초안',cardEl.querySelector('.draft'));return}
+ if(b.dataset.act==='save'){
+  const k=key(t), i=basket.findIndex(x=>x.key===k);
+  if(i>=0){basket.splice(i,1);b.classList.remove('on');b.textContent='담기';}
+  else{basket.push({key:k,title:t.title,m:t.m,k:t.k,where:`${S[t.si].s} ${ROMAN[t.ui]}. ${S[t.si].u[t.ui].n}`});b.classList.add('on');b.textContent='담김';toast('담았어요');}
+  save();renderBasket();return}
+});
+$('q').addEventListener('input',e=>{st.q=e.target.value;render()});
+$('major').value=st.major;
+$('major').addEventListener('input',e=>{st.major=e.target.value;
+ document.querySelectorAll('.card').forEach(el=>{const t=topicMap.get(el.dataset.key);if(t)el.querySelector('.draft').textContent=draft(t)});save();});
+
+render();
+})();
+</script>
+</body>
+</html>
